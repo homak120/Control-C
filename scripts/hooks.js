@@ -21,6 +21,8 @@ const EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', ...TOOL_EVENTS
 const command =
   `curl -s -m 1 -o /dev/null -X POST -H 'Content-Type: application/json' ` +
   `-H "X-Control-C-Token: $(cat "$HOME/.control-c/token" 2>/dev/null)" ` +
+  // The hook runs inside the session's terminal, so tmux's variables tell us which pane it is.
+  `-H "X-Control-C-Pane: \${TMUX_PANE:-}" -H "X-Control-C-Tmux: \${TMUX:-}" ` +
   `--data-binary @- http://127.0.0.1:${PORT}/api/hooks >/dev/null 2>&1 || true ${MARKER}`;
 
 const entry = (event) => ({

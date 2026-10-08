@@ -27,7 +27,8 @@ export class HookHub extends EventEmitter {
     this.live = new Map(); // session_id -> live state
   }
 
-  receive(payload) {
+  /** `where` holds the tmux pane and socket the hook ran in, if any. */
+  receive(payload, where = {}) {
     const name = payload.hook_event_name;
     const id = payload.session_id;
     if (!name || !id) return null;
@@ -42,6 +43,8 @@ export class HookHub extends EventEmitter {
       source: payload.source || payload.reason || null,
       message: payload.message || (name === 'UserPromptSubmit' ? payload.prompt?.slice(0, 200) : null) || null,
       notificationType: payload.notification_type || null,
+      pane: where.pane || null,
+      tmux: where.tmux || null,
     };
     this.events.push(event);
     if (this.events.length > MAX_EVENTS) this.events.shift();
@@ -57,6 +60,8 @@ export class HookHub extends EventEmitter {
       tool: name === 'PreToolUse' ? event.tool : null,
       attention: name === 'Notification' ? event.message : null,
       startSource: name === 'SessionStart' ? event.source : prev.startSource || null,
+      pane: event.pane || prev.pane || null,
+      tmux: event.tmux || prev.tmux || null,
     };
     this.live.set(id, next);
     this.emit('hook', { event, live: next });

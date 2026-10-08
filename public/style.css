@@ -75,9 +75,12 @@ code, pre { font-family: var(--mono); font-size: 12.5px; }
 /* ---- layout ---- */
 .layout { display: grid; grid-template-columns: 300px 1fr; height: calc(100% - 48px); }
 .sidebar { border-right: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
-.main { overflow-y: auto; position: relative; min-width: 0; }
+.main { overflow: hidden; position: relative; min-width: 0; }
 
 .sidebar-tools { padding: 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--border); }
+.search-row { display: flex; gap: 8px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; white-space: nowrap; }
+.btn.primary:hover { color: #fff; filter: brightness(1.08); }
 input[type="search"] { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; outline: none; }
 input[type="search"]:focus { border-color: var(--accent); }
 .seg { display: flex; background: var(--panel-2); border-radius: 8px; padding: 2px; }
@@ -111,8 +114,44 @@ input[type="search"]:focus { border-color: var(--accent); }
 .empty p { max-width: 380px; margin: 4px 0; }
 
 /* ---- session header ---- */
-.session { max-width: 920px; margin: 0 auto; padding: 0 24px 80px; }
-.session-head { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 20px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.session { height: 100%; display: flex; flex-direction: column; }
+.session-head { flex: none; background: var(--bg); padding: 16px 24px 12px; border-bottom: 1px solid var(--border); }
+.head-note { margin: 6px 0 0; }
+.mode-switch { min-width: 220px; }
+.session-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.session-body[data-mode="split"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.session-body[data-mode="chat"] .term-col, .session-body[data-mode="terminal"] .chat-col { display: none; }
+.chat-col { overflow-y: auto; position: relative; min-width: 0; }
+.chat-inner { max-width: 920px; margin: 0 auto; padding: 20px 24px 80px; }
+.session-body[data-mode="split"] .chat-inner { padding: 20px 20px 80px; }
+
+/* ---- terminal panel ---- */
+.term-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 12px; gap: 10px; border-left: 1px solid var(--border); background: var(--panel-2); }
+.term-frame { flex: 1; min-height: 0; background: #1b1a19; border-radius: 10px; padding: 10px; overflow: hidden; }
+.term { width: 100%; height: 100%; overflow: auto; }
+.term .xterm { height: 100%; }
+.term-tools { flex: none; display: grid; gap: 8px; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.keys button { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: 3px 9px; font: 12px var(--mono); cursor: pointer; }
+.keys button:hover { border-color: var(--accent); color: var(--accent); }
+.term-status { font-size: 12px; color: var(--muted); }
+.term-status[data-state="live"] { color: var(--green); }
+.term-status[data-state="closed"] { color: var(--red); }
+.send { display: flex; gap: 8px; align-items: flex-end; }
+.send textarea { flex: 1; resize: none; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; outline: none; max-height: 160px; }
+.send textarea:focus { border-color: var(--accent); }
+.term-badge { flex: none; margin-left: auto; font-size: 11px; color: var(--accent); }
+
+/* ---- new session dialog ---- */
+#new-dialog { width: min(520px, calc(100vw - 32px)); }
+.new-form { padding: 18px 20px; display: grid; gap: 8px; }
+.new-form h2 { margin: 0 0 6px; font-size: 17px; }
+.new-form label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.new-form input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: 13px var(--mono); outline: none; }
+.new-form input:focus { border-color: var(--accent); }
+.new-form p { margin: 0; }
+.form-error { color: var(--red); font-size: 13px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .head-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .head-title h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge { flex: none; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); font-weight: 600; }
@@ -174,7 +213,7 @@ pre.output { font-size: 12px; }
 .line-link { border: 0; background: none; padding: 0 4px; border-radius: 4px; font: 11px var(--mono); color: var(--gray); cursor: pointer; flex: none; }
 .line-link:hover { color: var(--accent); background: var(--accent-soft); }
 
-.jump { position: sticky; bottom: 20px; left: 50%; transform: translateX(-50%); display: block; margin: 0 auto; border: 0; background: var(--accent); color: #fff; padding: 7px 16px; border-radius: 999px; cursor: pointer; font-weight: 600; box-shadow: 0 4px 14px rgb(0 0 0 / 0.2); }
+.jump { position: sticky; bottom: 20px; z-index: 1; left: 50%; transform: translateX(-50%); display: block; margin: 0 auto; border: 0; background: var(--accent); color: #fff; padding: 7px 16px; border-radius: 999px; cursor: pointer; font-weight: 600; box-shadow: 0 4px 14px rgb(0 0 0 / 0.2); }
 
 /* ---- markdown ---- */
 .md { overflow-wrap: anywhere; }
@@ -209,7 +248,10 @@ dialog::backdrop { background: rgb(0 0 0 / 0.35); }
   .layout { grid-template-columns: 1fr; }
   .sidebar { position: fixed; inset: 48px 0 0 0; z-index: 5; transform: translateX(-100%); transition: transform 0.2s; width: min(320px, 85vw); box-shadow: 0 0 30px rgb(0 0 0 / 0.25); }
   body.sidebar-open .sidebar { transform: none; }
-  .session { padding: 0 16px 80px; }
+  .session-head { padding: 12px 16px; }
+  .chat-inner { padding: 16px 16px 80px; }
+  .session-body[data-mode="split"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .term-col { border-left: 0; border-top: 1px solid var(--border); }
   #last-write { display: none; }
   .pill { max-width: 140px; }
 }

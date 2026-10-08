@@ -1,6 +1,6 @@
 {
   "name": "control-c",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local control center for Claude Code sessions: live dashboard, remote control and automation.",
   "private": true,
   "type": "module",
@@ -15,5 +15,12 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@xterm/xterm": "^6.0.0",
+    "ws": "^8.22.0"
+  },
+  "bin": {
+    "ctrlc": "bin/ctrlc.js"
+  }
 }

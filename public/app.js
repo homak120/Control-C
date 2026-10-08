@@ -12,10 +12,23 @@
     sessions: new Map(), // id -> summary
     live: {},            // id -> hook-derived live state
     hooksSeen: false,
-    selected: null,
+    selected: null,       // session id shown, or null
+    selectedPane: null,   // pane id shown on its own (terminal not yet linked to a session)
+    terminals: [],        // tmux panes from the hub, each with the session it runs (if known)
     filter: 'all',
     query: '',
+    mode: pref('mode', 'split'), // chat | terminal | split, when a terminal is available
   };
+
+  function pref(key, fallback) {
+    try { return localStorage.getItem(`control-c.${key}`) || fallback; } catch { return fallback; }
+  }
+  function savePref(key, value) {
+    try { localStorage.setItem(`control-c.${key}`, value); } catch {}
+  }
+
+  const termForSession = (id) => state.terminals.find((t) => t.sessionId === id && !t.dead);
+  const paneNum = (id) => id.replace('%', '');
 
   // ---- formatting ------------------------------------------------------------
 
@@ -63,6 +76,7 @@
     state.sessions = new Map(data.sessions.map((s) => [s.id, s]));
     state.live = data.live;
     state.hooksSeen = data.hooksSeen;
+    state.terminals = data.terminals || [];
     renderHookStatus();
     renderList();
   }
@@ -82,14 +96,26 @@
 
   function renderList() {
     const list = $('#session-list');
+    list.replaceChildren();
+
+    // Terminals whose Claude session isn't known yet (just started, no prompt sent).
+    const pending = state.terminals.filter((t) => !t.sessionId && !t.dead);
+    if (pending.length) {
+      const g = el('div', 'group');
+      const h = el('div', 'group-head');
+      h.append(el('span', null, 'New terminals'), el('span', 'count', String(pending.length)));
+      g.append(h);
+      for (const t of pending) g.append(paneRow(t));
+      list.append(g);
+    }
+
     const groups = new Map();
     for (const s of visibleSessions()) {
       const key = projectName(s);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(s);
     }
-    list.replaceChildren();
-    if (!groups.size) list.append(el('p', 'muted pad', state.sessions.size ? 'No sessions match.' : 'No sessions found yet.'));
+    if (!groups.size && !pending.length) list.append(el('p', 'muted pad', state.sessions.size ? 'No sessions match.' : 'No sessions found yet.'));
     for (const [name, sessions] of groups) {
       const g = el('div', 'group');
       const h = el('div', 'group-head');
@@ -107,10 +133,21 @@
     a.dataset.id = s.id;
     const top = el('div', 'row-top');
     top.append(el('span', `dot ${st.key}`), el('span', 'row-title', s.title || '(untitled)'));
+    if (termForSession(s.id)) top.append(el('span', 'term-badge', '▣'));
     const sub = el('div', 'row-sub');
     const bits = [rel(s.lastTs), `${s.prompts} prompt${s.prompts === 1 ? '' : 's'}`, money(s.costUSD)].filter(Boolean);
     sub.append(el('span', `state ${st.key}`, st.label), el('span', null, ' · ' + bits.join(' · ')));
     a.append(top, sub);
+    return a;
+  }
+
+  function paneRow(t) {
+    const a = el('a', `row${t.id === state.selectedPane ? ' selected' : ''}`);
+    a.href = `#/t/${paneNum(t.id)}`;
+    a.dataset.pane = t.id;
+    const top = el('div', 'row-top');
+    top.append(el('span', 'dot idle'), el('span', 'row-title', t.cwd.split('/').filter(Boolean).pop() || t.cwd), el('span', 'term-badge', '▣'));
+    a.append(top, el('div', 'row-sub', `${t.session} · waiting for first prompt`));
     return a;
   }
 
@@ -125,14 +162,27 @@
 
   let view = null; // per-session render state
 
-  async function openSession(id) {
-    state.selected = id;
-    document.querySelectorAll('.row.selected').forEach((r) => r.classList.remove('selected'));
-    document.querySelector(`.row[data-id="${id}"]`)?.classList.add('selected');
+  function showSessionUI() {
     document.body.classList.remove('sidebar-open');
     $('#empty').hidden = true;
     $('#session').hidden = false;
+  }
+
+  function markSelected() {
+    document.querySelectorAll('.row.selected').forEach((r) => r.classList.remove('selected'));
+    const row = state.selected
+      ? document.querySelector(`.row[data-id="${state.selected}"]`)
+      : document.querySelector(`.row[data-pane="${state.selectedPane}"]`);
+    row?.classList.add('selected');
+  }
+
+  async function openSession(id) {
+    state.selected = id;
+    state.selectedPane = null;
+    markSelected();
+    showSessionUI();
     $('#timeline').replaceChildren(el('p', 'muted pad', 'Loading…'));
+    syncTerminal();
     try {
       const data = await api(`/api/sessions/${id}`);
       if (state.selected !== id) return;
@@ -148,6 +198,92 @@
     } catch (err) {
       $('#timeline').replaceChildren(el('p', 'muted pad', `Couldn't load session: ${err.message}`));
     }
+  }
+
+  // A terminal that isn't linked to a session yet: show just the terminal.
+  function openPane(paneId) {
+    state.selected = null;
+    state.selectedPane = paneId;
+    view = null;
+    markSelected();
+    showSessionUI();
+    $('#timeline').replaceChildren();
+    renderPaneHead();
+    syncTerminal();
+  }
+
+  function renderPaneHead() {
+    const t = state.terminals.find((x) => x.id === state.selectedPane);
+    const head = $('#session-head');
+    head.replaceChildren();
+    const titleRow = el('div', 'head-title');
+    titleRow.append(el('span', 'dot idle'), el('h1', null, t ? `New session · ${t.cwd.split('/').pop()}` : 'Terminal closed'), el('span', 'badge idle', 'terminal'));
+    head.append(titleRow);
+    if (!t) return;
+    head.append(el('p', 'muted small head-note', 'The chat view appears here as soon as you send the first prompt.'));
+    const facts = el('dl', 'facts');
+    for (const [k, v] of [['Folder', t.cwd], ['Terminal', `${t.session} (${t.cols}×${t.rows})`]]) {
+      const d = el('div'); d.append(el('dt', null, k), el('dd', null, v)); facts.append(d);
+    }
+    head.append(facts);
+    head.append(headActions([['Copy attach command', `ctrlc attach ${t.session}`]]));
+  }
+
+  function headActions(copies, extra = []) {
+    const actions = el('div', 'head-actions');
+    for (const [label, text] of copies) {
+      const b = el('button', 'btn', label);
+      b.onclick = async () => { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; setTimeout(() => (b.textContent = label), 1200); };
+      actions.append(b);
+    }
+    actions.append(...extra);
+    return actions;
+  }
+
+  // ---- terminal panel ----------------------------------------------------------------
+
+  let termView = null;
+
+  function currentTerminal() {
+    if (state.selectedPane) return state.terminals.find((t) => t.id === state.selectedPane && !t.dead) || null;
+    return state.selected ? termForSession(state.selected) || null : null;
+  }
+
+  // Show, hide or switch the live terminal to match the current selection.
+  function syncTerminal() {
+    const t = currentTerminal();
+    const body = $('#session-body');
+    const mode = !t ? 'chat' : state.selectedPane ? 'terminal' : state.mode;
+    body.dataset.mode = mode;
+    if (!t || mode === 'chat') {
+      if (termView && !t) { termView.dispose(); termView = null; }
+      return;
+    }
+    if (termView?.paneId !== t.id) {
+      termView?.dispose();
+      $('#term').replaceChildren();
+      termView = new window.TerminalView($('#term'), t.id, {
+        onStatus: (s) => { $('#term-status').textContent = { live: '● live', connecting: 'connecting…', reconnecting: 'reconnecting…', closed: 'terminal closed' }[s] || s; $('#term-status').dataset.state = s; },
+      });
+    }
+    requestAnimationFrame(() => termView?.fit());
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    savePref('mode', mode);
+    syncTerminal();
+    renderHead();
+    if (mode !== 'terminal') scrollToBottom();
+  }
+
+  const KEYS = { esc: '\x1b', enter: '\r', up: '\x1b[A', down: '\x1b[B', shifttab: '\x1b[Z', ctrlc: '\x03' };
+
+  function sendPrompt(text) {
+    if (!termView || !text.trim()) return;
+    // Multi-line text goes in as a bracketed paste so newlines don't submit early.
+    termView.send(text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text);
+    setTimeout(() => termView?.send('\r'), 60);
   }
 
   function renderHead() {
@@ -178,19 +314,27 @@
     fact('Branch', s.gitBranch);
     head.append(facts);
 
-    const actions = el('div', 'head-actions');
-    const copyBtn = (label, text) => {
-      const b = el('button', 'btn', label);
-      b.onclick = async () => { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; setTimeout(() => (b.textContent = label), 1200); };
-      return b;
-    };
-    actions.append(el('code', 'sid', s.id), copyBtn('Copy ID', s.id));
-    if (s.cwd) actions.append(copyBtn('Copy resume command', `cd ${JSON.stringify(s.cwd)} && claude --resume ${s.id}`));
+    const extra = [];
+    const t = termForSession(s.id);
+    if (t) {
+      const seg = el('div', 'seg mode-switch');
+      for (const [mode, label] of [['chat', 'Chat'], ['split', 'Split'], ['terminal', 'Terminal']]) {
+        const b = el('button', state.mode === mode ? 'on' : '', label);
+        b.onclick = () => setMode(mode);
+        seg.append(b);
+      }
+      extra.push(seg);
+    }
     if (s.continuedIn) {
       const a = el('a', 'btn', 'Go to continuation →');
       a.href = `#/s/${s.continuedIn}`;
-      actions.append(a);
+      extra.push(a);
     }
+    const copies = [['Copy ID', s.id]];
+    if (t) copies.push(['Copy attach command', `ctrlc attach ${t.session}`]);
+    else if (s.cwd) copies.push(['Copy resume command', `cd ${JSON.stringify(s.cwd)} && claude --resume ${s.id}`]);
+    const actions = headActions(copies, extra);
+    actions.prepend(el('code', 'sid', s.id));
     head.append(actions);
   }
 
@@ -338,7 +482,7 @@
 
   // ---- scrolling -----------------------------------------------------------------
 
-  const main = () => $('#main');
+  const main = () => $('#chat-col');
   const nearBottom = () => main().scrollHeight - main().scrollTop - main().clientHeight < 120;
   const scrollToBottom = () => { main().scrollTop = main().scrollHeight; $('#jump').hidden = true; };
 
@@ -395,6 +539,18 @@
       if (msg.type === 'reset' && msg.id === state.selected) openSession(msg.id);
     });
 
+    es.addEventListener('terminals', (e) => {
+      state.terminals = JSON.parse(e.data).terminals;
+      // A new terminal just got its first prompt: switch from the bare terminal to the full session view.
+      if (state.selectedPane) {
+        const t = state.terminals.find((x) => x.id === state.selectedPane);
+        if (t?.sessionId && state.sessions.has(t.sessionId)) { location.replace(`#/s/${t.sessionId}`); return renderList(); }
+        renderPaneHead();
+      }
+      renderList();
+      if (state.selected) { renderHead(); syncTerminal(); } else if (state.selectedPane) syncTerminal();
+    });
+
     es.addEventListener('hook', (e) => {
       const { live } = JSON.parse(e.data);
       state.live[live.sessionId] = live;
@@ -408,12 +564,44 @@
 
   function route() {
     const m = location.hash.match(/^#\/s\/([\w-]+)/);
+    const t = location.hash.match(/^#\/t\/(\d+)/);
     if (m && m[1] !== state.selected) openSession(m[1]);
-    if (!m) {
+    else if (t && `%${t[1]}` !== state.selectedPane) openPane(`%${t[1]}`);
+    else if (!m && !t) {
       state.selected = null;
+      state.selectedPane = null;
+      termView?.dispose();
+      termView = null;
       $('#session').hidden = true;
       $('#empty').hidden = false;
     }
+  }
+
+  // ---- new session dialog ----------------------------------------------------------
+
+  function openNewDialog() {
+    const cwds = [...new Set([...state.sessions.values()].sort((a, b) => (b.lastTs || '').localeCompare(a.lastTs || '')).map((s) => s.cwd).filter(Boolean))];
+    $('#cwd-options').replaceChildren(...cwds.map((c) => Object.assign(document.createElement('option'), { value: c })));
+    $('#new-cwd').value = cwds[0] || '';
+    $('#new-error').hidden = true;
+    $('#new-dialog').showModal();
+    $('#new-cwd').select();
+  }
+
+  async function startSession(e) {
+    e.preventDefault();
+    const r = await fetch('/api/terminals', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd: $('#new-cwd').value.trim() }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { $('#new-error').textContent = data.error || `Failed (${r.status})`; $('#new-error').hidden = false; return; }
+    $('#new-dialog').close();
+    const list = await api('/api/terminals');
+    state.terminals = list.terminals;
+    renderList();
+    if (data.paneId) location.hash = `#/t/${paneNum(data.paneId)}`;
   }
 
   $('#search').addEventListener('input', (e) => { state.query = e.target.value; renderList(); });
@@ -425,11 +613,31 @@
     renderList();
   });
   $('#jump').onclick = scrollToBottom;
-  $('#main').addEventListener('scroll', () => { if (nearBottom()) $('#jump').hidden = true; });
+  $('#chat-col').addEventListener('scroll', () => { if (nearBottom()) $('#jump').hidden = true; });
   $('#raw-close').onclick = () => $('#raw-dialog').close();
+  $('#new-session').onclick = openNewDialog;
+  $('#new-cancel').onclick = () => $('#new-dialog').close();
+  $('#new-form').addEventListener('submit', startSession);
+  $('#keys').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-key]');
+    if (b && termView) { termView.send(KEYS[b.dataset.key]); termView.focus(); }
+  });
+  $('#term-send').addEventListener('submit', (e) => {
+    e.preventDefault();
+    sendPrompt($('#term-input').value);
+    $('#term-input').value = '';
+    $('#term-input').style.height = '';
+  });
+  $('#term-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#term-send').requestSubmit(); }
+  });
+  $('#term-input').addEventListener('input', (e) => {
+    e.target.style.height = '';
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+  });
   $('#toggle-sidebar').onclick = () => document.body.classList.toggle('sidebar-open');
   window.addEventListener('hashchange', route);
-  setInterval(() => { renderList(); if (state.selected) renderHead(); }, 30000);
+  setInterval(() => { renderList(); if (state.selected) renderHead(); else if (state.selectedPane) renderPaneHead(); }, 30000);
 
   loadSessions().then(route).catch((err) => console.error(err));
   // Opening the stream before `load` keeps Chrome's page-loading indicator spinning forever.

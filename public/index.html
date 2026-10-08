@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Control-C</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="style.css">
+  <script src="vendor/xterm.js" defer></script>
   <script src="markdown.js" defer></script>
+  <script src="terminal.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -23,7 +26,10 @@
   <div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-tools">
-        <input type="search" id="search" placeholder="Search sessions…" autocomplete="off">
+        <div class="search-row">
+          <input type="search" id="search" placeholder="Search sessions…" autocomplete="off">
+          <button class="btn primary" id="new-session" title="Start Claude Code in a new terminal">＋ New</button>
+        </div>
         <div class="seg" role="tablist" id="filter">
           <button data-filter="all" class="on">All</button>
           <button data-filter="open">Open</button>
@@ -38,12 +44,36 @@
         <div class="kbd big">⌃C</div>
         <h1>Pick a session</h1>
         <p>Every Claude Code session on this Mac appears on the left and updates live as you work in the terminal.</p>
+        <p class="muted small">Start sessions with <code>ctrlc</code> (or <strong>＋ New</strong>) to also mirror and control their terminal here.</p>
       </div>
 
       <section class="session" id="session" hidden>
         <div class="session-head" id="session-head"></div>
-        <div class="timeline" id="timeline"></div>
-        <button class="jump" id="jump" hidden>↓ New activity</button>
+        <div class="session-body" id="session-body" data-mode="chat">
+          <div class="chat-col" id="chat-col">
+            <div class="chat-inner"><div class="timeline" id="timeline"></div></div>
+            <button class="jump" id="jump" hidden>↓ New activity</button>
+          </div>
+          <div class="term-col" id="term-col">
+            <div class="term-frame"><div class="term" id="term"></div></div>
+            <div class="term-tools">
+              <div class="keys" id="keys">
+                <button data-key="esc" title="Esc: cancel / interrupt Claude">Esc</button>
+                <button data-key="enter" title="Enter">⏎ Enter</button>
+                <button data-key="up" title="Up arrow">↑</button>
+                <button data-key="down" title="Down arrow">↓</button>
+                <button data-key="shifttab" title="Shift+Tab: cycle permission mode">⇧Tab</button>
+                <button data-key="ctrlc" title="Ctrl+C">⌃C</button>
+                <span class="spacer"></span>
+                <span class="term-status" id="term-status"></span>
+              </div>
+              <form class="send" id="term-send">
+                <textarea id="term-input" rows="1" placeholder="Message Claude…  (Enter sends, Shift+Enter for a new line)"></textarea>
+                <button class="btn primary" type="submit">Send</button>
+              </form>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -56,6 +86,21 @@
       <button class="btn" id="raw-close">Close</button>
     </div>
     <pre id="raw-body"></pre>
+  </dialog>
+
+  <dialog id="new-dialog">
+    <form id="new-form" class="new-form">
+      <h2>Start Claude Code</h2>
+      <label for="new-cwd">Project folder</label>
+      <input id="new-cwd" list="cwd-options" placeholder="~/Documents/Projects/…" autocomplete="off" required>
+      <datalist id="cwd-options"></datalist>
+      <p class="muted small">Runs <code>claude</code> in a new Control-C terminal. Open it in your own terminal anytime with <code>ctrlc attach</code>.</p>
+      <p class="form-error" id="new-error" hidden></p>
+      <div class="dialog-actions">
+        <button class="btn" type="button" id="new-cancel">Cancel</button>
+        <button class="btn primary" type="submit">Start</button>
+      </div>
+    </form>
   </dialog>
 </body>
 </html>
