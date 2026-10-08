@@ -1,0 +1,19 @@
+{
+  "name": "control-c",
+  "version": "0.1.0",
+  "description": "Local control center for Claude Code sessions: live dashboard, remote control and automation.",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "hooks": "node scripts/hooks.js",
+    "hooks:install": "node scripts/hooks.js --install",
+    "hooks:uninstall": "node scripts/hooks.js --uninstall"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

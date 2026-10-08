@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Control-C</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="markdown.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn only-narrow" id="toggle-sidebar" aria-label="Show sessions">☰</button>
+    <div class="brand"><span class="kbd">⌃C</span> Control-C</div>
+    <div class="topbar-status">
+      <span class="pill" id="last-write" hidden></span>
+      <span class="pill" id="hook-status" title="Claude Code hooks feed live state (working / waiting / idle)">hooks: –</span>
+      <span class="pill" id="conn-status"><span class="dot"></span><span class="label">connecting</span></span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-tools">
+        <input type="search" id="search" placeholder="Search sessions…" autocomplete="off">
+        <div class="seg" role="tablist" id="filter">
+          <button data-filter="all" class="on">All</button>
+          <button data-filter="open">Open</button>
+          <button data-filter="today">Today</button>
+        </div>
+      </div>
+      <nav id="session-list" class="session-list" aria-label="Sessions"></nav>
+    </aside>
+
+    <main class="main" id="main">
+      <div class="empty" id="empty">
+        <div class="kbd big">⌃C</div>
+        <h1>Pick a session</h1>
+        <p>Every Claude Code session on this Mac appears on the left and updates live as you work in the terminal.</p>
+      </div>
+
+      <section class="session" id="session" hidden>
+        <div class="session-head" id="session-head"></div>
+        <div class="timeline" id="timeline"></div>
+        <button class="jump" id="jump" hidden>↓ New activity</button>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="raw-dialog">
+    <div class="dialog-head">
+      <strong id="raw-title">Raw line</strong>
+      <span class="spacer"></span>
+      <button class="btn" id="raw-copy">Copy</button>
+      <button class="btn" id="raw-close">Close</button>
+    </div>
+    <pre id="raw-body"></pre>
+  </dialog>
+</body>
+</html>
