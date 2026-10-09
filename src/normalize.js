@@ -3,6 +3,8 @@
 // The transcript format is internal to Claude Code and changes between versions,
 // so every assumption about it lives in this one file.
 
+import { responseCost } from './pricing.js';
+
 const MAX_PROMPT = 20000;
 const MAX_TOOL_IO = 4000;
 
@@ -21,9 +23,10 @@ const tag = (s, name) => s.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?
 /**
  * Normalize one parsed transcript line.
  * Returns display items (possibly none). `meta` collects session-level facts
- * (title, cwd, model, cost…) and is updated in place.
+ * (title, cwd, model, cost…) and is updated in place. Sidechain lines (subagent
+ * work) are skipped unless `sidechain` is set, as it is for subagent transcripts.
  */
-export function normalizeLine(d, line, meta) {
+export function normalizeLine(d, line, meta, { sidechain = false } = {}) {
   const ts = d.timestamp || null;
   const base = { line, ts };
   const items = [];
@@ -35,7 +38,7 @@ export function normalizeLine(d, line, meta) {
     if (!meta.firstTs || ts < meta.firstTs) meta.firstTs = ts;
     if (!meta.lastTs || ts > meta.lastTs) meta.lastTs = ts;
   }
-  if (d.isSidechain) return items;
+  if (d.isSidechain && !sidechain) return items;
 
   switch (d.type) {
     case 'user': {
@@ -79,7 +82,7 @@ export function normalizeLine(d, line, meta) {
       // One API response is split over several lines that repeat the same usage; count it once.
       if (m.id && m.usage && meta._lastMsgId !== m.id) {
         meta._lastMsgId = m.id;
-        meta.outputTokens = (meta.outputTokens || 0) + (m.usage.output_tokens || 0);
+        addUsage(meta, m.model, m.usage);
       }
       for (const b of m.content || []) {
         if (b.type === 'thinking' || b.type === 'redacted_thinking') {
@@ -143,6 +146,20 @@ export function normalizeLine(d, line, meta) {
   return items;
 }
 
+// Token totals and a running cost estimate. The exact cost only arrives with the
+// cost-state line at exit; until then this is all we have.
+function addUsage(meta, model, u) {
+  const n = (v) => (Number.isFinite(v) ? v : 0);
+  meta.outputTokens = (meta.outputTokens || 0) + n(u.output_tokens);
+  meta.inputTokens = (meta.inputTokens || 0) + n(u.input_tokens);
+  meta.cacheReadTokens = (meta.cacheReadTokens || 0) + n(u.cache_read_input_tokens);
+  meta.cacheWriteTokens = (meta.cacheWriteTokens || 0) + n(u.cache_creation_input_tokens);
+  if (model === '<synthetic>') return;
+  const usd = responseCost(model, u);
+  if (usd == null) meta.unpricedResponses = (meta.unpricedResponses || 0) + 1;
+  else meta.costEstimateUSD = (meta.costEstimateUSD || 0) + usd;
+}
+
 function toolSummary(name, input) {
   switch (name) {
     case 'Bash': return input.command;
@@ -178,11 +195,43 @@ export function sessionSummary(s) {
     version: m.version || null,
     gitBranch: m.gitBranch || null,
     costUSD: m.costUSD ?? null,
+    costEstimateUSD: m.costEstimateUSD ?? null,
+    unpricedResponses: m.unpricedResponses || 0,
     outputTokens: m.outputTokens || 0,
+    inputTokens: m.inputTokens || 0,
+    cacheReadTokens: m.cacheReadTokens || 0,
+    cacheWriteTokens: m.cacheWriteTokens || 0,
     closed: !!m.closed,
     turnOpen: !!m.turnOpen,
     continuedIn: m.continuedIn || null,
     permissionMode: m.permissionMode || null,
     modifiedMs: s.mtimeMs,
+  };
+}
+
+/**
+ * Facts about one subagent, from <session>/subagents/agent-<id>.meta.json and the
+ * metadata collected while reading its transcript. `toolUseId` is the parent's
+ * Agent/Task tool call that started it.
+ */
+export function subagentSummary(agentId, metaFile, s) {
+  const f = metaFile && typeof metaFile === 'object' ? metaFile : {};
+  const str = (v) => (typeof v === 'string' ? v : null);
+  return {
+    agentId,
+    agentType: str(f.agentType),
+    description: str(f.description),
+    name: str(f.name),
+    toolUseId: str(f.toolUseId),
+    spawnDepth: Number.isInteger(f.spawnDepth) ? f.spawnDepth : null,
+    isFork: f.isFork === true,
+    model: s.meta.model || str(f.model),
+    firstTs: s.meta.firstTs || null,
+    lastTs: s.meta.lastTs || null,
+    lines: s.lineNo,
+    bytes: s.bytes,
+    outputTokens: s.meta.outputTokens || 0,
+    costEstimateUSD: s.meta.costEstimateUSD ?? null,
+    unpricedResponses: s.meta.unpricedResponses || 0,
   };
 }

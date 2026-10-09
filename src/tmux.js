@@ -29,7 +29,7 @@ export function tmux(args) {
 // %output data escapes bytes below 0x20 and backslash as \ooo octal; all other
 // bytes are passed through raw. Work on bytes so split UTF-8 sequences survive.
 const isOct = (b) => b >= 0x30 && b <= 0x37;
-function decodeOutput(buf) {
+export function decodeOutput(buf) {
   const out = Buffer.alloc(buf.length);
   let n = 0;
   for (let i = 0; i < buf.length; i++) {

@@ -9,11 +9,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { HOST, PORT, CLAUDE_PROJECTS_DIR, TOKEN_FILE, loadToken } from './config.js';
+import { HOST, PORT, CLAUDE_PROJECTS_DIR, CLAUDE_SESSIONS_DIR, TOKEN_FILE, loadToken } from './config.js';
 import { SessionStore } from './transcripts.js';
 import { HookHub } from './hooks.js';
 import { TmuxManager } from './tmux.js';
 import { Linker } from './links.js';
+import { SessionRegistry } from './registry.js';
 import { sessionSummary } from './normalize.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,7 +33,8 @@ const token = loadToken();
 const store = new SessionStore(CLAUDE_PROJECTS_DIR);
 const hooks = new HookHub();
 const tmux = new TmuxManager();
-const linker = new Linker(store, hooks, tmux);
+const registry = new SessionRegistry(CLAUDE_SESSIONS_DIR);
+const linker = new Linker(store, hooks, tmux, registry);
 const clients = new Set();
 
 // ---- auth --------------------------------------------------------------------
@@ -182,6 +184,16 @@ async function handle(req, res) {
     return send(res, 200, { summary: sessionSummary(s), live: hooks.live.get(m[1]) || null, items });
   }
 
+  if ((m = p.match(/^\/api\/sessions\/([\w-]+)\/subagents$/))) {
+    const subagents = await store.subagents(m[1]);
+    return subagents ? send(res, 200, { subagents }) : send(res, 404, { error: 'unknown session' });
+  }
+
+  if ((m = p.match(/^\/api\/sessions\/([\w-]+)\/subagents\/([\w-]+)$/))) {
+    const items = await store.subagentItems(m[1], m[2]);
+    return items ? send(res, 200, { items }) : send(res, 404, { error: 'unknown subagent' });
+  }
+
   if ((m = p.match(/^\/api\/sessions\/([\w-]+)\/lines\/(\d+)$/))) {
     const raw = await store.rawLine(m[1], Number(m[2]));
     return raw == null ? send(res, 404, { error: 'no such line' }) : send(res, 200, raw, 'text/plain; charset=utf-8');
@@ -260,12 +272,14 @@ function upgrade(req, socket, head) {
 
 store.on('append', (data) => { broadcast('append', data); publishTerminals(); });
 store.on('session', (data) => broadcast('session', data));
+registry.on('change', () => publishTerminals());
 hooks.on('hook', (data) => broadcast('hook', data));
 setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 20000).unref();
 
 const t0 = Date.now();
 await store.start();
 tmux.start();
+registry.start();
 const server = http.createServer((req, res) => handle(req, res).catch((err) => {
   console.error(err);
   if (!res.headersSent) send(res, 500, { error: 'internal error' });

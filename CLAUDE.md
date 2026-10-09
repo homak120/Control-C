@@ -10,9 +10,10 @@ npm start                    # hub on http://127.0.0.1:7777, prints a one-time l
 PORT=7798 CONTROL_C_HOME=/tmp/cc-test npm start   # throwaway instance with its own token
 ctrlc [folder]               # start Claude Code inside Control-C's tmux (bin/ctrlc.js)
 npm run hooks                # preview the hook config; hooks:install / hooks:uninstall
+npm test                     # unit tests (node:test, no dependencies)
 ```
 
-- **No test suite yet.** Verify changes by running the hub against the real `~/.claude/projects` and checking the dashboard in a browser.
+- **Tests:** `npm test` covers the data layer: transcript parsing, file following, tmux output decoding, the session registry and pane linking. Fixtures in `test/` mirror real transcript shapes; update them when Claude Code's format changes. UI and live tmux behaviour still need checking by running the hub against the real `~/.claude/projects` and looking at the dashboard in a browser.
 - **Testing in a browser:** use a throwaway instance (`CONTROL_C_HOME` pointing at a temp folder whose `token` file holds a test token) and open `/?token=<test token>`. Never put the real token from `~/.control-c/token` in a URL or a browser field.
 - **Testing the terminal mirror:** start a pane on the Control-C socket, e.g. `tmux -L control-c -f tmux.conf new-session -d -s t1 'bash --norc'`. Clean up afterwards with `tmux -L control-c kill-server`. Note that this also ends any real `ctrlc` sessions.
 
@@ -33,7 +34,9 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 | `src/normalize.js` | Turns raw transcript lines into display items and session metadata |
 | `src/hooks.js` | Derives each session's live state (working / attention / idle / ended) from hook events |
 | `src/tmux.js` | Pane list, one control-mode client per tmux session (`%output` parsing), `send-keys -H` input, launch, viewer-driven resize |
-| `src/links.js` | Pane ↔ session matching: exact via hooks, with a folder + start-time fallback |
+| `src/links.js` | Pane ↔ session matching: exact via hooks or the registry, with a folder + start-time fallback for panes running Claude |
+| `src/pricing.js` | Per-model API prices and the per-response cost estimate (a lower bound; see `docs/data-inventory.md`). Update when prices or models change |
+| `src/registry.js` | Reads Claude Code's running-session list (`~/.claude/sessions/<pid>.json`, internal format): session id, folder, tmux pane. Never opens the `.key` files there |
 | `bin/ctrlc.js` | Launcher CLI (`ctrlc`, `ls`, `attach`, `kill`) |
 | `public/` | Dashboard in plain HTML/CSS/JS with no build step: `app.js` (UI), `terminal.js` (xterm.js wrapper), `markdown.js` (safe renderer) |
 | `scripts/hooks.js` | Adds and removes the hooks in `~/.claude/settings.json` (marked `# control-c`, backed up first) |
@@ -41,7 +44,7 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 
 ## Rules that matter
 
-- **Transcript format.** The `.jsonl` format is internal to Claude Code and changes between versions, so every assumption about it belongs in `src/normalize.js`. Hooks are the documented interface; prefer them for anything critical.
+- **Transcript format.** The `.jsonl` format is internal to Claude Code and changes between versions, so every assumption about it belongs in `src/normalize.js` (and, for `~/.claude/sessions`, in `src/registry.js`). Hooks are the documented interface; prefer them for anything critical.
 - **Security.** Control-C can type into agents that run shell commands, so treat every change here as security-sensitive.
   - Bind to `127.0.0.1` only, check the `Host` header, and require the token (cookie, `X-Control-C-Token` or Bearer) on every route.
   - The WebSocket must also check `Origin`.
@@ -66,8 +69,8 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 - Keep UI changes minimal, and don't build new screens or visual features without asking.
 
 **Known gaps:**
-- Subagent transcripts (`<session>/subagents/`) aren't shown.
-- Cost only appears once a session ends (it comes from the `cost-state` line).
+- Subagent conversations are served by the API (`/api/sessions/<id>/subagents`) but not shown in the UI, and aren't followed live.
+- Live cost is an estimate (`costEstimateUSD`, a lower bound, typically 5–15% under) and is in the API only. The UI still shows cost only once a session ends (exact, from the `cost-state` line).
 - Only `ctrlc` sessions can be mirrored.
 - Dark mode hasn't been checked visually.
 

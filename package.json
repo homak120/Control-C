@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "test": "node --test",
     "hooks": "node scripts/hooks.js",
     "hooks:install": "node scripts/hooks.js --install",
     "hooks:uninstall": "node scripts/hooks.js --uninstall"
