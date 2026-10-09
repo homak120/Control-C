@@ -37,6 +37,7 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 | `bin/ctrlc.js` | Launcher CLI (`ctrlc`, `ls`, `attach`, `kill`) |
 | `public/` | Dashboard in plain HTML/CSS/JS with no build step: `app.js` (UI), `terminal.js` (xterm.js wrapper), `markdown.js` (safe renderer) |
 | `scripts/hooks.js` | Adds and removes the hooks in `~/.claude/settings.json` (marked `# control-c`, backed up first) |
+| `docs/` | Design notes: `data-inventory.md` (what data exists and what's used), `remote-access.md` (undecided transport options) |
 
 ## Rules that matter
 
@@ -57,8 +58,12 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 
 1. Read-only dashboard: **done**
 2. Terminal mirror and input: **done**
-3. Remote access: secure access from other devices (never an open port), plus notifications for "needs permission" and "turn finished". **Next.** The transport isn't decided yet: Tailscale vs. a custom Cloudflare Worker + Supabase relay with end-to-end encryption, and Tailscale may not be installable on every machine. See `docs/remote-access.md` and revisit it before starting.
+3. Remote access: secure access from other devices (never an open port), plus notifications for "needs permission" and "turn finished". **On hold** until the owner is ready; data-layer work comes first (see UI status below). The transport isn't decided yet: Tailscale vs. a custom Cloudflare Worker + Supabase relay with end-to-end encryption, and Tailscale may not be installable on every machine. See `docs/remote-access.md` and revisit it before starting.
 4. Automation and agents: an MCP server in the hub, headless Agent SDK workers, and task handoff between agents.
+
+**UI status:** the current dashboard is a **demo** that shows what's possible. The owner plans a presentation redesign: research, brainstorming around their own day-to-day challenges, and working with Claude Design. Until then:
+- Put effort into the **data layer** (hub, API, tests). `docs/data-inventory.md` lists what's available.
+- Keep UI changes minimal, and don't build new screens or visual features without asking.
 
 **Known gaps:**
 - Subagent transcripts (`<session>/subagents/`) aren't shown.

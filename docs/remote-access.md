@@ -23,6 +23,12 @@ Related considerations for such machines:
 - **Outbound connections may be restricted too.** A corporate proxy or firewall may block WebSockets or unknown domains, so an outbound relay connection isn't guaranteed to work either.
 - **Policy.** Remote control of a managed machine may conflict with the organization's rules. Check before enabling it there.
 - **Hub prerequisites.** Even the hub needs Node.js and tmux. On a locked-down machine those may need to come from a user-level install (no admin rights).
+- **Hooks may be blocked.** Hooks live in `~/.claude/settings.json` and normally need no admin rights, but an organization can lock Claude Code so only hooks it approves will run. Without hooks, Control-C works from transcripts only:
+  - live status is less precise
+  - "needs permission" can't be detected reliably, which matters for remote notifications
+  - terminal links fall back to matching by folder
+
+  See `docs/data-inventory.md`.
 
 ## Options
 
