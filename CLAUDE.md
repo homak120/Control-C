@@ -57,7 +57,7 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 
 1. Read-only dashboard: **done**
 2. Terminal mirror and input: **done**
-3. Remote access: secure access from other devices (e.g. Tailscale or an SSH tunnel; never an open port), plus notifications for "needs permission" and "turn finished". **Next.**
+3. Remote access: secure access from other devices (never an open port), plus notifications for "needs permission" and "turn finished". **Next.** The transport isn't decided yet: Tailscale vs. a custom Cloudflare Worker + Supabase relay with end-to-end encryption, and Tailscale may not be installable on every machine. See `docs/remote-access.md` and revisit it before starting.
 4. Automation and agents: an MCP server in the hub, headless Agent SDK workers, and task handoff between agents.
 
 **Known gaps:**
