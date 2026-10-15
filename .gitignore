@@ -2,3 +2,7 @@ node_modules/
 .DS_Store
 *.log
 .env
+
+# Private research notes, kept local only
+docs/browser-agent-research.md
+docs/research-notes/

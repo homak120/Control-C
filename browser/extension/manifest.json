@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Control-C Browser Bridge",
+  "version": "0.1.0",
+  "description": "Lets local agents (any MCP client, scripts, the Control-C hub) drive tabs in their own tab groups.",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmSpGUFR4BMPVQuAFt2lE1eZ5AcJGlDvgVh+pcLiVOEBN/VkcWn0WsZoPkMwXITPPR7rlLy232/5MKr10GiVoRgQ9LeEX8PKySIWygkH077I48F91H6WYaAXFZjtAOuDXiEmGFyBTR5rMXGdKVgoFkdY/LDSe1L0X0ulbp2MZt/K/J5JHpBPx7/Vs21euLFTTIdClKyJ2vz/LNNotjExYi1Sp1rgOAgDPtEqZzXfj674n4ZcnfQaOu/oPXHyOEdm/65oJcWxXaW5/Qw7ER9DACO+3r2O8zsRarCRoF7q/HYkF4lUUUMU04SyB+pnDj/GWd9r81LHRgXSb2KtERefffwIDAQAB",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["debugger", "tabs", "tabGroups", "scripting", "nativeMessaging", "storage", "alarms"],
+  "host_permissions": ["<all_urls>"]
+}

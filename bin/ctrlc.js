@@ -5,6 +5,9 @@
 //   ctrlc ls                           list Control-C sessions
 //   ctrlc attach [name]                re-attach (default: most recent)
 //   ctrlc kill <name>                  end a session
+//   ctrlc browser install|uninstall    register the browser bridge's native host
+//   ctrlc browser status               list browsers the bridge is connected to
+//   ctrlc browser mcp                  run the browser MCP server (stdio)
 //
 // Detach with Ctrl+B then D: Claude keeps running and the dashboard keeps showing it.
 
@@ -55,8 +58,29 @@ if (cmd === 'ls' || cmd === 'list') {
 } else if (cmd === 'kill') {
   if (!argv[1]) { console.error('usage: ctrlc kill <name>'); process.exit(1); }
   process.exit(run(['kill-session', '-t', argv[1]], { stdio: 'inherit' }).status ?? 1);
+} else if (cmd === 'browser') {
+  const sub = argv[1];
+  if (sub === 'install' || sub === 'uninstall') {
+    const { install, uninstall } = await import('../browser/host/install.js');
+    const done = sub === 'install' ? install() : uninstall();
+    if (!done.length) console.log(sub === 'install' ? 'No supported browser found.' : 'Nothing to remove.');
+    for (const d of done) console.log(`${sub === 'install' ? 'Registered' : 'Removed'} ${d}`);
+    if (sub === 'install' && done.length) {
+      console.log(`\nNext: load ${path.resolve(path.dirname(new URL(import.meta.url).pathname), '../browser/extension')} as an unpacked extension, then restart the browser.`);
+    }
+  } else if (sub === 'status') {
+    const { listBrokers } = await import('../browser/host/client.js');
+    const list = listBrokers();
+    if (!list.length) console.log('No browser connected.');
+    for (const b of list) console.log(`${b.browser.padEnd(12)} extension ${b.extVersion}  pid ${b.pid}  ${b.socket}`);
+  } else if (sub === 'mcp') {
+    await import('../browser/host/mcp.js');
+  } else {
+    console.error('usage: ctrlc browser install|uninstall|status|mcp');
+    process.exit(1);
+  }
 } else if (cmd === '-h' || cmd === '--help' || cmd === 'help') {
-  console.log(fs.readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 9).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+  console.log(fs.readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 12).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
 } else {
   const sep = argv.indexOf('--');
   const folderArg = sep === 0 ? undefined : argv[0];
