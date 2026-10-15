@@ -37,10 +37,11 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 | `src/links.js` | Pane ↔ session matching: exact via hooks or the registry, with a folder + start-time fallback for panes running Claude |
 | `src/pricing.js` | Per-model API prices and the per-response cost estimate (a lower bound; see `docs/data-inventory.md`). Update when prices or models change |
 | `src/registry.js` | Reads Claude Code's running-session list (`~/.claude/sessions/<pid>.json`, internal format): session id, folder, tmux pane. Never opens the `.key` files there |
-| `bin/ctrlc.js` | Launcher CLI (`ctrlc`, `ls`, `attach`, `kill`) |
+| `bin/ctrlc.js` | Launcher CLI (`ctrlc`, `ls`, `attach`, `kill`, `browser install\|uninstall\|status\|mcp`) |
+| `browser/` | Browser bridge prototype: MV3 `extension/` (CDP via `chrome.debugger`, a tab group per client) and `host/` (native-messaging broker that owns a 0700 per-user socket, plus an MCP shim). Host name `io.controlc.browser_bridge`; never reuse Anthropic's `com.anthropic.*` names or sockets |
 | `public/` | Dashboard in plain HTML/CSS/JS with no build step: `app.js` (UI), `terminal.js` (xterm.js wrapper), `markdown.js` (safe renderer) |
 | `scripts/hooks.js` | Adds and removes the hooks in `~/.claude/settings.json` (marked `# control-c`, backed up first) |
-| `docs/` | Design notes: `data-inventory.md` (what data exists and what's used), `remote-access.md` (undecided transport options) |
+| `docs/` | Design notes: `data-inventory.md` (what data exists and what's used), `remote-access.md` (undecided transport options), `desktop-browser.md` (decided: the agent browser is a pinned, verified ungoogled-chromium build) |
 
 ## Rules that matter
 
@@ -63,6 +64,7 @@ tmux -L control-c (sessions started by ctrlc) ◀─control mode / send-keys─�
 2. Terminal mirror and input: **done**
 3. Remote access: secure access from other devices (never an open port), plus notifications for "needs permission" and "turn finished". **On hold** until the owner is ready; data-layer work comes first (see UI status below). The transport isn't decided yet: Tailscale vs. a custom Cloudflare Worker + Supabase relay with end-to-end encryption, and Tailscale may not be installable on every machine. See `docs/remote-access.md` and revisit it before starting.
 4. Automation and agents: an MCP server in the hub, headless Agent SDK workers, and task handoff between agents.
+   - **Browser:** the bridge in `browser/` drives the owner's real Chrome today. **Decided (2026-10-14):** agents get their own browser, plain Chromium from ungoogled-chromium's arm64 macOS releases, pinned by version and SHA-256, with its signing team ID checked; the owner maintains updates. The dashboard opens as an `--app` window in it; no Electron, Google Chrome or Chrome for Testing. Next step: `browser/runtime/fetch.js` and `launch.js`. See `docs/desktop-browser.md` and don't reopen the choice without the owner.
 
 **UI status:** the current dashboard is a **demo** that shows what's possible. The owner plans a presentation redesign: research, brainstorming around their own day-to-day challenges, and working with Claude Design. Until then:
 - Put effort into the **data layer** (hub, API, tests). `docs/data-inventory.md` lists what's available.
